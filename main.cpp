@@ -69,7 +69,7 @@ bool TL2Injector::GetDllList(vector<string> * filenames)
 	bool stillSearching = true;
 	while (fileSearchHandle != INVALID_HANDLE_VALUE && stillSearching)
 	{
-		filenames->push_back( string(currentFileData.cFileName) );
+		filenames->push_back( string("TL2I\\") + string(currentFileData.cFileName) );
 		stillSearching = FindNextFile(fileSearchHandle, &currentFileData);
 	}
 	if (filenames->size() == 0)
