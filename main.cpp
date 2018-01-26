@@ -19,7 +19,9 @@ namespace TL2Injector
 // processInfo is a pointer used for output
 bool TL2Injector::StartGame(PROCESS_INFORMATION * processInfo)
 {
-	bool success = CreateProcess("Torchlight2.exe", NULL, NULL, NULL, TRUE, 0, NULL, NULL, NULL, processInfo);
+	STARTUPINFO startupInfo;
+	ZeroMemory( &startupInfo, sizeof(startupInfo) );
+	bool success = CreateProcess("Torchlight2.exe", NULL, NULL, NULL, TRUE, 0, NULL, NULL, &startupInfo, processInfo);
 	return success;
 }
 
@@ -63,11 +65,12 @@ bool TL2Injector::GetDllList(vector<string> * filenames)
 {
 	// iterate through each file in the subdirectory "TL2I" and save the filenames to a vector
 	WIN32_FIND_DATA currentFileData;
-	HANDLE fileSearchHandle = FindFirstFile(".\\TL2I\\*.dll", &currentFileData);
-	while (fileSearchHandle != INVALID_HANDLE_VALUE)
+	HANDLE fileSearchHandle = FindFirstFile("TL2I\\*.dll", &currentFileData);
+	bool stillSearching = true;
+	while (fileSearchHandle != INVALID_HANDLE_VALUE && stillSearching)
 	{
 		filenames->push_back( string(currentFileData.cFileName) );
-		FindNextFile(fileSearchHandle, &currentFileData);
+		stillSearching = FindNextFile(fileSearchHandle, &currentFileData);
 	}
 	if (filenames->size() == 0)
 	{
@@ -79,12 +82,15 @@ bool TL2Injector::GetDllList(vector<string> * filenames)
 int main(int argc, char * argv[])
 {
 	PROCESS_INFORMATION processInfo;
+	ZeroMemory(&processInfo, sizeof(processInfo));
+	
 	if ( !TL2Injector::StartGame(&processInfo) ) // attempt to start the game
 	{
 		printf("Unable to start game.");
 		return -1;
 	}
-	HANDLE * processHandle = &(processInfo.hProcess); 
+	printf("Torchlight 2 has been started.");
+	HANDLE processHandle = OpenProcess(PROCESS_ALL_ACCESS, false, processInfo.dwProcessId); 
 	
 	// now get a list of every DLL in the subdirectory TL2I
 	vector<string> dllFilenames;
@@ -92,13 +98,17 @@ int main(int argc, char * argv[])
 	{
 		printf("No DLLs loaded.");
 	}
-	
+	printf("Found %u DLLs.", dllFilenames.size());
 	// Once we have all the DLL names, iterate through and inject them
 	for (unsigned int i=0; i<dllFilenames.size(); i++)
 	{
-		if ( !InjectDll(processHandle, dllFilenames[i]) )
+		if ( !InjectDll(&processHandle, dllFilenames[i]) )
 		{
 			printf("Injection failed for file %s", dllFilenames[i].c_str());
+		}
+		else 
+		{
+			printf("Injected file %s successfully.", dllFilenames[i].c_str());
 		}
 	}
 	
