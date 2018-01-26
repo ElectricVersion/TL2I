@@ -5,6 +5,8 @@
 #include <fstream>
 #include <vector>
 
+#define INIT_FUNCTION "Tl2iInit" 
+
 using namespace std;
 
 namespace TL2Injector 
@@ -25,6 +27,7 @@ bool InjectDll(HANDLE * targetProcess, string dllName)
 {
 	const char * dllNameCstr = dllName.c_str();
 	int dllNameLen = dllName.length()+1;
+	DWORD libAddress = 0;
 	LPTHREAD_START_ROUTINE loadDllAddress = (LPTHREAD_START_ROUTINE)GetProcAddress(GetModuleHandle("Kernel32"), "LoadLibraryA");
 	
 	// Store the DLL name in the process's memory so we can load it
@@ -32,8 +35,26 @@ bool InjectDll(HANDLE * targetProcess, string dllName)
 	WriteProcessMemory(targetProcess, libNameMemory, dllNameCstr, dllNameLen, NULL);
 	HANDLE injectionThread = CreateRemoteThread(targetProcess, NULL, 0, loadDllAddress, libNameMemory, 0, NULL);
 	WaitForSingleObject(injectionThread, INFINITE);
+	GetExitCodeThread(injectionThread, &libAddress );
 	VirtualFreeEx(targetProcess, libNameMemory, dllNameLen, MEM_RELEASE);
 	CloseHandle(injectionThread);
+	
+	// Call init function
+	// If there's no init function then DllMain should be defined instead
+	HMODULE loadedLib = LoadLibrary(dllNameCstr);
+	if (GetProcAddress(loadedLib, INIT_FUNCTION) == NULL) // if there's no init function, don't call it!
+	{
+		FreeLibrary(loadedLib);
+	}
+	else
+	{
+		DWORD initOffset = (DWORD)(GetProcAddress(loadedLib, INIT_FUNCTION)) - (DWORD)(loadedLib);
+		FreeLibrary(loadedLib); // we've got the address so we dont need this anymore
+		LPTHREAD_START_ROUTINE initAddress = (LPTHREAD_START_ROUTINE)(initOffset+libAddress);
+		HANDLE initThread = CreateRemoteThread(targetProcess, NULL, 0, initAddress, NULL, 0, NULL);
+		WaitForSingleObject(initThread, INFINITE);
+		CloseHandle(initThread);
+	}
 	
 	return true;
 }
